@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <sched.h>
 #include <inttypes.h>
+#include <stdbool.h>
 
 #include <sys/syscall.h>
 #include <sys/types.h>
@@ -78,7 +79,7 @@ struct sched_attr {
 	uint64_t sched_period;
 };
 
-static uint64_t get_time_us(void)
+uint64_t get_time_us(void)
 {
 	struct timespec ts;
 	uint64_t time;
@@ -90,14 +91,38 @@ static uint64_t get_time_us(void)
 	return time;
 }
 
-int main ()
+bool init_rt(void)
 {
+	if (mlockall(MCL_CURRENT|MCL_FUTURE) == -1) {
+		perror("mlockall");
+		return false;
+	}
+
+	return true;
+}
+
+void die(const char *msg)
+{
+	write(STDERR_FILENO, msg, strlen(msg));
+	exit(EXIT_FAILURE);
+}
+
+
+int main()
+{
+	bool ok;
 	struct sched_attr attr;
+
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_policy = SCHED_DEADLINE;
 	attr.sched_runtime = 30000000;
 	attr.sched_period = 100000000;
 	attr.sched_deadline = attr.sched_period;
+
+	ok = init_rt();
+	if (!ok) {
+		die("Failed to initialize RT subsystem, bye\n");
+	}
 
 	if (sched_setattr(gettid(), &attr, 0))
 		perror("sched_setattr()");
