@@ -107,16 +107,52 @@ void die(const char *msg)
 	exit(EXIT_FAILURE);
 }
 
+int drop_priviliges(void)
+{
+	int id = 1000;
+	if (getuid() == 0) {
+		/* process is running as root, drop privileges */
+		if (setgid(id) != 0) {
+			perror("setgid");
+			return -1;
+
+		}
+		if (setuid(id) != 0) {
+			perror("setuid");
+			return -1;
+		}
+	}
+
+	if (chdir("/") != 0) {
+		perror("chdir");
+		return -1;
+	}
+
+	// check if we successfully dropped the root privileges
+	if (setuid(0) == 0 || seteuid(0) == 0) {
+		printf("could not drop root privileges!\n");
+		return -1;
+	}
+
+
+	return 0;
+}
 
 int main()
 {
 	bool ok;
+	int ret;
 	struct sched_attr attr;
 
-	attr.size = sizeof(struct sched_attr);
+	ret = sched_getattr(0, &attr, sizeof(attr), 0);
+	if (ret < 0) {
+		perror("sched_getattr");
+		die("get attr\n");;
+	}
+
 	attr.sched_policy = SCHED_DEADLINE;
-	attr.sched_runtime = 30000000;
-	attr.sched_period = 100000000;
+	attr.sched_runtime = 3000000;
+	attr.sched_period = 10000000;
 	attr.sched_deadline = attr.sched_period;
 
 	ok = init_rt();
@@ -124,8 +160,13 @@ int main()
 		die("Failed to initialize RT subsystem, bye\n");
 	}
 
-	if (sched_setattr(gettid(), &attr, 0))
+	if (sched_setattr(0, &attr, 0))
 		perror("sched_setattr()");
+
+	//drop_root_privileges();
+	drop_priviliges();
+
+	printf("uid: %d\n", getuid());
 
 	return 0;
 }
